@@ -1,6 +1,6 @@
 /*
  * ChatGPT Plugin for libpurple/Pidgin
- * Copyright (c) 2024 Eion Robb
+ * Copyright (c) 2024-2026 Eion Robb
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,8 +31,8 @@
 #include <glib/gi18n.h>
 #include <sys/types.h>
 #ifdef __GNUC__
-	#include <sys/time.h>
-	#include <unistd.h>
+#	include <sys/time.h>
+#	include <unistd.h>
 #endif
 
 #ifndef G_GNUC_NULL_TERMINATED
@@ -104,17 +104,31 @@
 #include "util.h"
 #include "version.h"
 
-	
 #if GLIB_MAJOR_VERSION >= 2 && GLIB_MINOR_VERSION >= 12
 #	define atoll(a) g_ascii_strtoll(a, NULL, 0)
 #endif
 
 #define CHATGPT_PLUGIN_ID "prpl-eionrobb-chatgpt"
-#define CHATGPT_PLUGIN_VERSION "1.0"
+#define CHATGPT_PLUGIN_VERSION "2.0"
 
-#define CHATGPT_API_HOST "api.openai.com"
-#define CHATGPT_INSTRUCTOR_ID "OpenAI Agent"
-#define CHATGPT_API_KEY_URL "https://platform.openai.com/settings/organization/general"
+typedef enum {
+	CHATGPT_PROVIDER_OPENAI = 0,
+	CHATGPT_PROVIDER_GEMINI,
+	CHATGPT_PROVIDER_CLAUDE,
+	CHATGPT_PROVIDER_CUSTOM
+} ChatGptProvider;
+
+typedef struct _ChatMessage {
+	gchar *role;    /* "user" or "assistant" */
+	gchar *content; /* message text */
+} ChatMessage;
+
+typedef struct _ChatConversation {
+	gchar *who;           /* buddy name */
+	GList *messages;      /* GList of ChatMessage* */
+	gchar *model;         /* conversation-specific model, or NULL */
+	gchar *system_prompt; /* conversation-specific system prompt, or NULL */
+} ChatConversation;
 
 typedef struct _ChatGptAccount ChatGptAccount;
 struct _ChatGptAccount {
@@ -122,18 +136,25 @@ struct _ChatGptAccount {
 	PurpleConnection *pc;
 	PurpleHttpKeepalivePool *keepalive_pool;
 	PurpleHttpConnectionSet *conns;
+
+	ChatGptProvider provider;
+	gchar *api_key;
+	gchar *api_url;
+	gchar *default_model;
+	gchar *system_prompt;
+
+	GList *available_models;   /* GList of gchar* */
+	GHashTable *conversations; /* who (gchar*) -> ChatConversation* */
 };
 
 typedef struct _ChatGptBuddy ChatGptBuddy;
 struct _ChatGptBuddy {
 	PurpleBuddy *buddy;
-	gchar *thread_id;
-	gchar *instructions;
+	gchar *model;
+	gchar *system_prompt;
 	gchar *name;
 	gchar *description;
-	gchar *model;
 };
-
 
 typedef void (*ChatGptCallbackFunc)(ChatGptAccount *cga, JsonObject *obj, gpointer user_data);
 typedef void (*ChatGptCallbackErrorFunc)(ChatGptAccount *cga, const gchar *data, gssize data_len, gpointer user_data);
@@ -147,6 +168,5 @@ struct _ChatGptApiConnection {
 	PurpleHttpConnection *http_conn;
 	ChatGptCallbackErrorFunc error_callback;
 };
-
 
 #endif /* LIBCHATGPT_H */
